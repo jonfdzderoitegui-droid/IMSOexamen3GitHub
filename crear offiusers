@@ -1,0 +1,121 @@
+Import-Module ActiveDirectory
+
+# ==========================================
+# CONFIGURACIÓN
+# ==========================================
+
+$dominio = "DC=FdzdeRoitegui,DC=com"
+
+# Ruta compartida para perfiles móviles
+$perfilShare = "\\SRV-DC\Perfiles"
+
+# Contraseña por defecto
+$password = ConvertTo-SecureString "Inazuma1" -AsPlainText -Force
+
+# ==========================================
+# CREAR UNIDADES ORGANIZATIVAS
+# ==========================================
+
+$ous = @("offi1","offi2","offi3")
+
+foreach ($ou in $ous) {
+
+    New-ADOrganizationalUnit `
+        -Name $ou `
+        -Path $dominio `
+        -ProtectedFromAccidentalDeletion $false `
+        -ErrorAction SilentlyContinue
+}
+
+# ==========================================
+# CREAR GRUPOS
+# ==========================================
+
+foreach ($grupo in $ous) {
+
+    New-ADGroup `
+        -Name $grupo `
+        -GroupScope Global `
+        -GroupCategory Security `
+        -Path "OU=$grupo,$dominio" `
+        -ErrorAction SilentlyContinue
+}
+
+# ==========================================
+# FUNCIÓN CREAR USUARIO
+# ==========================================
+
+function Crear-Usuario {
+    param(
+        [string]$NombreUsuario,
+        [string]$OU,
+        [string]$Grupo,
+        [string]$PerfilMovil
+    )
+
+    $rutaOU = "OU=$OU,$dominio"
+
+    New-ADUser `
+        -Name $NombreUsuario `
+        -SamAccountName $NombreUsuario `
+        -UserPrincipalName "$NombreUsuario@FdzdeRoitegui.com" `
+        -AccountPassword $password `
+        -Enabled $true `
+        -ChangePasswordAtLogon $false `
+        -Path $rutaOU
+
+    # Configurar perfil móvil si corresponde
+    if ($PerfilMovil -ne "") {
+
+        Set-ADUser `
+            -Identity $NombreUsuario `
+            -ProfilePath "$perfilShare\$NombreUsuario"
+    }
+
+    # Añadir al grupo
+    Add-ADGroupMember `
+        -Identity $Grupo `
+        -Members $NombreUsuario
+}
+
+# ==========================================
+# CREAR offi1user1
+# ==========================================
+
+Crear-Usuario `
+    -NombreUsuario "offi1user1" `
+    -OU "offi1" `
+    -Grupo "offi1" `
+    -PerfilMovil ""
+
+# ==========================================
+# CREAR offi2user1 -> offi2user50
+# ==========================================
+
+for ($i=1; $i -le 50; $i++) {
+
+    $usuario = "offi2user$i"
+
+    Crear-Usuario `
+        -NombreUsuario $usuario `
+        -OU "offi2" `
+        -Grupo "offi2" `
+        -PerfilMovil "SI"
+}
+
+# ==========================================
+# CREAR offi3user1 -> offi3user30
+# ==========================================
+
+for ($i=1; $i -le 30; $i++) {
+
+    $usuario = "offi3user$i"
+
+    Crear-Usuario `
+        -NombreUsuario $usuario `
+        -OU "offi3" `
+        -Grupo "offi3" `
+        -PerfilMovil "SI"
+}
+
+Write-Host "Usuarios, OUs y grupos creados correctamente"
